@@ -1,0 +1,190 @@
+#include <WiFiClientSecure.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+
+const char AMAZON_ROOT_CA1[] PROGMEM = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL
+MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv
+b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj
+ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM
+9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw
+IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6
+VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L
+93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm
+jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC
+AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA
+A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI
+U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs
+N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv
+o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU
+5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy
+rqXRfboQnoZsG4q5WTP468SQvvG5
+-----END CERTIFICATE-----
+)EOF";
+
+const char CERTIFICATE[] PROGMEM = R"KEY(
+-----BEGIN CERTIFICATE-----
+MIIDWTCCAkGgAwIBAgIUSfpO5RJiu3cOosaZoc2WM9H9NQUwDQYJKoZIhvcNAQEL
+BQAwTTFLMEkGA1UECwxCQW1hem9uIFdlYiBTZXJ2aWNlcyBPPUFtYXpvbi5jb20g
+SW5jLiBMPVNlYXR0bGUgU1Q9V2FzaGluZ3RvbiBDPVVTMB4XDTIzMTExNTIzMTkx
+MVoXDTQ5MTIzMTIzNTk1OVowHjEcMBoGA1UEAwwTQVdTIElvVCBDZXJ0aWZpY2F0
+ZTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBAMIjbgcrAZoH7UHLHBi2
+jU8KhVG1zMTe9g1OXXq+mixH8WeddHXbCpOlQFrJ2ydl97CrioJNXYOppprDmCpj
+eoKDpkqFPqPEItyyprt+hBukdrg/YLBdcUPBtcJmmFJLwqwOEgATaqF9Z9YP1GHU
+w82XjgVRHJEeolBOVUaWjTXEtK6omFinENx3stZ+YauH55rvlp00DhFROBKXHwnB
+bR/HjAdHUrwIy3AWFxdNVi4ORlSBKEfuh4FW1K19bRUFRmf8/NSgPrHwFK8c88il
+E85hfDSRr7ITNlV69Nx+eOuKDK51iv4Y68oW1eo75yTgtEeNyMBi6fJLrpadDcOA
+GD8CAwEAAaNgMF4wHwYDVR0jBBgwFoAUSzIjqJFxPqSWZtpEN3RhcqEq/fowHQYD
+VR0OBBYEFPIJjjKwhhzhCLYlzfP/uj5/dKxOMAwGA1UdEwEB/wQCMAAwDgYDVR0P
+AQH/BAQDAgeAMA0GCSqGSIb3DQEBCwUAA4IBAQAoGy+5K8NPWGxXKn/gsN0FG+p1
+DaPTajnBYonALS54Ozgg9gDpuRgsPpg3sCjQF1KwiXOPYsyRY6o/dy105bD3m6Gs
+sqJbYhYxqQCDYxB78ab0ohpOUo6sUaVg9G9Yq8NFaqXu6NhrzQyEsxQiSmMIxLYC
+NgU/wEsvT8knLAQQt8g/n/F5ToSmUPMFBxkoq8GdR4mw00wnb3TV5Qe8MJMGxVeY
+u98SvY7jAuLjRJjkEDg0di578PtIpCUuSXUrXC44RVff1BcdVs/VTq/Cnkg22uvn
+wXkYVEjMZYVFe323jHU7Uyf6PXqrPGFJMxFNUTBiOhm518nu5tDHnFZLUCf3
+-----END CERTIFICATE-----
+)KEY";
+
+const char PRIVATE_KEY[] PROGMEM = R"KEY(
+-----BEGIN RSA PRIVATE KEY-----
+MIIEpQIBAAKCAQEAwiNuBysBmgftQcscGLaNTwqFUbXMxN72DU5der6aLEfxZ510
+ddsKk6VAWsnbJ2X3sKuKgk1dg6mmmsOYKmN6goOmSoU+o8Qi3LKmu36EG6R2uD9g
+sF1xQ8G1wmaYUkvCrA4SABNqoX1n1g/UYdTDzZeOBVEckR6iUE5VRpaNNcS0rqiY
+WKcQ3Hey1n5hq4fnmu+WnTQOEVE4EpcfCcFtH8eMB0dSvAjLcBYXF01WLg5GVIEo
+R+6HgVbUrX1tFQVGZ/z81KA+sfAUrxzzyKUTzmF8NJGvshM2VXr03H5464oMrnWK
+/hjryhbV6jvnJOC0R43IwGLp8kuulp0Nw4AYPwIDAQABAoIBAQCgGhXgJXBhtc3N
+J5KZMttgZt3Bn/sqFHG4UXs4Ab4lbINCHxDvLOARGQP0m2l3mVjmQuGsSd8n+J3k
+Hg/8TSO4RJe79xzMc7EIbvCfyVtrbHtXwTSc3cLNzQ93LaLKo538xHHFzD1wxnn+
+h/lvYMbFYwoFinnTl/7l2WPsHbaAsrGBJTO1PSMrIVpA7M4+NdIHzwNHOIsb/Mto
+4fNrPMQUZzaekVZZw6NcPDzm68x2ju9ebCNi4sfGUMlGZYHmIMnyJfWLvJi4UyUi
+gQD7gsJJ/+UbUg0/Mtus7biLhCiB8wNIpOQToGRBRQER8aQ/NoxD7x5P887W6D/2
+nSpUL5TxAoGBAPZaHq2IHgQ2l7cxHpPQEDPE8AjTH2k5GOIdru7hdfqqx5CIi902
+uBVj+OLS/IspFSswXdFLsz48BYqQWvGP7yemsON4QlNuAzSKopRfFOyQTn8VKDL5
+wNjiWcStVQFVkyHFvfcwK691oGWOy0+IGIWVz4yzrO+dp5RqcB1rhZSXAoGBAMm9
+01+YBM0UzdcFaeM5XujuMVSgc4uU6vwjQMo0nldVmEKEVfykTCxADsfPz3ejmIWg
+zHdkoqVD0W+YA1jpP5f3JfiCUhqNJjlvJAMrRLDAnBlhXmQu4i7+dcqcbrPBKi0a
+260r2M1tqQUGkgleJCMHzQfVNOMVrAgtxWuaX0aZAoGBAL18egZOIZBqEW5F6NgW
+/K9lNqADDDEaSup5nHl/kAi73X5tmO8RTKyfVevaD4hWlELBFBiNWpRvBHAdMuaF
+KJXeIEcG1DVp9Cswy3bGX8jKAqa7Nk1nT49DI3slO7IoCWC7wa9lLOTr2/Dh0b4d
+14bAwYDfHxC7ug9tg0kN0BSHAoGAOAi0nBmiQ8AiiDWluool1XbLVuEWFs/vEMdN
+6JwC2ukYWGlfZMPRsHy+XjtXObjD1WHbSNI35sVWd7N2QozOsAvijQrNeTh5RHyd
+ORAcjSeCc/46dIMdKcZdu0AF84GUkGCkYY4LMsvhpVa020s9qEkzZpiOjwBm/wKP
+khqXmgkCgYEAsNoh0+sQzAM2EKeibMFrrBuOtsvYogCsNxqS4tfHyPDQmxRiRlMb
+E5odtX4tNIzksXP3vV1uQz0pCg1dJsmuZRMLXgwylJKKglioEe2PDpUyWxGM5AWx
+nh+LPAQSoxnynoCEO5Q5HxxQjtAmmnlkjun3HdKv/mOmXKGmSua0iVE=
+-----END RSA PRIVATE KEY-----
+)KEY";
+
+const char* WIFI_SSID = "LABO17";
+const char* WIFI_PASS = "catolica17";
+
+const char* MQTT_BROKER = "a1srjk70y6ht4r-ats.iot.us-east-2.amazonaws.com";
+const int MQTT_BROKER_PORT = 8883;
+
+const char* MQTT_CLIENT_ID = "sensor";
+const char* UPDATE_HUMIDITY_TOPIC = "$aws/things/sensor/shadow/update";
+const char* WATER_PUMP_TOPIC = "$aws/things/bomba/shadow/update/accepted";
+
+WiFiClientSecure wiFiClient;
+PubSubClient mqttClient(wiFiClient);
+
+int humidity = 0;
+bool watering = false;
+
+StaticJsonDocument<JSON_OBJECT_SIZE(3)> outputDoc;
+char outputBuffer[128];
+
+void publishHumidity() {
+  String humidity_str = String(humidity);
+  outputDoc["state"]["reported"]["humidity"] = humidity_str.c_str();
+  serializeJson(outputDoc, outputBuffer);
+  mqttClient.publish(UPDATE_HUMIDITY_TOPIC, outputBuffer);
+}
+
+StaticJsonDocument<JSON_OBJECT_SIZE(64)> inputDoc;
+
+void callback(const char* topic, byte* payload, unsigned int lenght) {
+  String message;
+  for (int i = 0; i < lenght; i++) {
+    message += String((char)payload[i]);
+  }
+  Serial.println("Message from topic " + String(topic) + ":" + message);
+  DeserializationError err = deserializeJson(inputDoc, payload);
+  if (!err) {
+    if (String(topic) == WATER_PUMP_TOPIC) {
+      String tmpWatering = String(inputDoc["state"]["reported"]["watering"].as<const char*>());
+      if (tmpWatering == "Yes") watering = true;
+      else if (tmpWatering == "No") watering = false;
+    }
+  }
+}
+
+boolean mqttClientConnect() {
+  Serial.print("Connecting to " + String(MQTT_BROKER));
+  if (mqttClient.connect(MQTT_CLIENT_ID)) {
+    Serial.println(" DONE!");
+
+    mqttClient.subscribe(WATER_PUMP_TOPIC);
+    Serial.println("Subscribed to " + String(WATER_PUMP_TOPIC));
+  } else {
+    Serial.println("Can't connect to " + String(MQTT_BROKER));
+  }
+  return mqttClient.connected();
+}
+
+const int PIN_SENSOR = 33;  //Lectura del sensor
+
+void setup() {
+  Serial.begin(115200);
+  Serial.print("Connecting to " + String(WIFI_SSID));
+
+  WiFi.begin(WIFI_SSID, WIFI_PASS);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(200);
+    Serial.print(".");
+  }
+  Serial.println(" DONE!");
+
+  wiFiClient.setCACert(AMAZON_ROOT_CA1);
+  wiFiClient.setCertificate(CERTIFICATE);
+  wiFiClient.setPrivateKey(PRIVATE_KEY);
+
+  mqttClient.setServer(MQTT_BROKER, MQTT_BROKER_PORT);
+  mqttClient.setCallback(callback);
+
+  pinMode(PIN_SENSOR, INPUT);
+}
+
+unsigned long previousConnectMillis = 0;
+unsigned long previousPublishMillis = 0;
+
+void measureHumidity() {
+  humidity = map(analogRead(PIN_SENSOR), 4095, 1800, 0, 100);
+  Serial.print("Humedad del suelo: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+}
+
+void loop() {
+  unsigned long now = millis();
+  if (!mqttClient.connected()) {
+    if (now - previousConnectMillis >= 2000) {
+      previousConnectMillis = now;
+      if (mqttClientConnect()) previousConnectMillis = 0;
+      else delay(1000);
+    }
+  } else {  // Connected to the MQTT Broker
+    mqttClient.loop();
+    delay(20);
+    int measureInterval = 2500;
+    if (watering) measureInterval = 2500;
+    if (now - previousPublishMillis >= measureInterval) {
+      previousPublishMillis = now;
+      measureHumidity();
+      publishHumidity();
+    }
+  }
+}
